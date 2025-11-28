@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Certificados generados (se generan en runtime)
+certificados/*.svg
+certificados/*.png
+
+# Base de datos (se genera en runtime)
+*.db
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Archivos de desarrollo
+docker-compose.yml
+.env
+.env.local
+
+# Documentación de desarrollo
+ADMIN.md
+DEPLOYMENT.md
+README.md
+
+# Archivos temporales
+*.tmp

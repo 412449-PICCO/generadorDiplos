@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Certificados</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 1.8em;
+        }
+
+        .stats {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .stat {
+            background: #f0f4ff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #e0e7ff;
+            color: #667eea;
+        }
+
+        .btn-danger {
+            background: #fee;
+            color: #c33;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #555;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .help-text {
+            color: #888;
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .url-link {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .url-link:hover {
+            text-decoration: underline;
+        }
+
+        .badge {
+            background: #e0f7fa;
+            color: #00796b;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .stats {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🎓 Panel de Certificados</h1>
+            </div>
+            <div class="stats">
+                <div class="stat">{{ total }} certificados</div>
+                <a href="/admin/exportar" class="btn btn-secondary">📥 Exportar Lista</a>
+                <a href="/admin/logout" class="btn btn-danger">🚪 Salir</a>
+            </div>
+        </div>
+
+        <!-- Generar Certificados -->
+        <div class="section">
+            <h2>Generar Certificados</h2>
+            <div id="successMessage" class="success-message"></div>
+
+            <form id="generateForm">
+                <div class="form-group">
+                    <label for="participantes">Participantes (uno por línea: Nombre Completo, email@example.com)</label>
+                    <textarea id="participantes" name="participantes" required placeholder="Juan Pérez, juan@example.com&#10;María González, maria@example.com&#10;Carlos Rodríguez, carlos@example.com"></textarea>
+                    <div class="help-text">Formato: Nombre Completo, email (separado por coma)</div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">✨ Generar Certificados</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Lista de Certificados -->
+        <div class="section">
+            <h2>Certificados Generados</h2>
+
+            {% if certificados %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Slug</th>
+                        <th>URL</th>
+                        <th>Visto</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cert in certificados %}
+                    <tr>
+                        <td><strong>{{ cert.nombre }}</strong></td>
+                        <td>{{ cert.email }}</td>
+                        <td><code>{{ cert.slug }}</code></td>
+                        <td>
+                            <a href="/certificado/{{ cert.slug }}" target="_blank" class="url-link">
+                                /certificado/{{ cert.slug }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if cert.visto > 0 %}
+                            <span class="badge">{{ cert.visto }} veces</span>
+                            {% else %}
+                            <span style="color: #999;">No visto</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ cert.fecha_generacion[:10] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📭</div>
+                <p>No hay certificados generados todavía</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('generateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const textarea = document.getElementById('participantes');
+            const lines = textarea.value.trim().split('\n');
+
+            const participantes = [];
+            for (const line of lines) {
+                const [nombre, email] = line.split(',').map(s => s.trim());
+                if (nombre && email) {
+                    participantes.push({ nombre, email });
+                }
+            }
+
+            if (participantes.length === 0) {
+                alert('No hay participantes válidos');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/generar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ participantes })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const successMsg = document.getElementById('successMessage');
+                    successMsg.textContent = `✅ ${data.exitosos} certificados generados correctamente!`;
+                    successMsg.classList.add('show');
+
+                    // Limpiar textarea
+                    textarea.value = '';
+
+                    // Recargar página después de 2 segundos
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error al generar certificados: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

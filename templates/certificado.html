@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificado de {{ nombre }}</title>
+
+    <!-- Open Graph / LinkedIn -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ url }}">
+    <meta property="og:title" content="Certificado de {{ nombre }}">
+    <meta property="og:description" content="Certificado de participación otorgado a {{ nombre }}">
+    <meta property="og:image" content="{{ url.replace('/certificado/', '/preview/') }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="675">
+    <meta property="og:image:alt" content="Certificado de {{ nombre }}">
+    <meta property="og:site_name" content="Sistema de Certificados">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="{{ url }}">
+    <meta name="twitter:title" content="Certificado de {{ nombre }}">
+    <meta name="twitter:description" content="Certificado de participación verificado">
+    <meta name="twitter:image" content="{{ url.replace('/certificado/', '/preview/') }}">
+
+    <!-- Información adicional -->
+    <meta name="description" content="Certificado de participación otorgado a {{ nombre }}">
+    <meta name="author" content="{{ nombre }}">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            display: flex;
+        }
+
+        svg {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    {{ svg_content|safe }}
+</body>
+</html>

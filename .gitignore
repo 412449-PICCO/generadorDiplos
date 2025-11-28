@@ -1,0 +1,33 @@
+# Certificados generados
+certificados/*.svg
+certificados/*_preview.png
+
+# Base de datos (comentar si quieres versionar la BD)
+certificados.db
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Entorno virtual
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

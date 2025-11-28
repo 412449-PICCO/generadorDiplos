@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - ADMIN_PASSWORD=admin123
+      - SECRET_KEY=dev-secret-key-change-in-production
+    volumes:
+      # Montar directorio de certificados para persistencia
+      - ./certificados:/app/certificados
+      # Montar base de datos para persistencia
+      - ./certificados.db:/app/certificados.db
+    restart: unless-stopped
