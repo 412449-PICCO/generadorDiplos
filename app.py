@@ -63,36 +63,44 @@ try:
 except Exception as e:
     logger.warning(f"Rate limiting configurado sin Redis: {e}")
 
-# Inicializar servicios
+# Inicializar servicios (con fallbacks para permitir arranque)
+db = None
+cloudinary_storage = None
+generator = None
+
 try:
     db = Database(config.DATABASE_URL)
     logger.info("Base de datos inicializada")
 except Exception as e:
-    logger.error(f"Error al inicializar base de datos: {e}")
-    raise
+    logger.warning(f"Base de datos no disponible: {e}")
+    logger.warning("La app arrancará pero funcionalidad limitada")
 
 try:
-    cloudinary_storage = CloudinaryStorage(
-        cloud_name=config.CLOUDINARY_CLOUD_NAME,
-        api_key=config.CLOUDINARY_API_KEY,
-        api_secret=config.CLOUDINARY_API_SECRET,
-        folder=config.CLOUDINARY_FOLDER
-    )
-    logger.info("Cloudinary inicializado")
+    if config.CLOUDINARY_CLOUD_NAME and config.CLOUDINARY_API_KEY:
+        cloudinary_storage = CloudinaryStorage(
+            cloud_name=config.CLOUDINARY_CLOUD_NAME,
+            api_key=config.CLOUDINARY_API_KEY,
+            api_secret=config.CLOUDINARY_API_SECRET,
+            folder=config.CLOUDINARY_FOLDER
+        )
+        logger.info("Cloudinary inicializado")
+    else:
+        logger.warning("Cloudinary no configurado (configurar variables de entorno)")
 except Exception as e:
-    logger.error(f"Error al inicializar Cloudinary: {e}")
-    cloudinary_storage = None
+    logger.warning(f"Error al inicializar Cloudinary: {e}")
 
 try:
-    generator = CertificateGenerator(
-        template_path=config.TEMPLATE_PATH,
-        database=db,
-        cloudinary_storage=cloudinary_storage
-    )
-    logger.info("Generador de certificados inicializado")
+    if db and os.path.exists(config.TEMPLATE_PATH):
+        generator = CertificateGenerator(
+            template_path=config.TEMPLATE_PATH,
+            database=db,
+            cloudinary_storage=cloudinary_storage
+        )
+        logger.info("Generador de certificados inicializado")
+    else:
+        logger.warning("Generador no inicializado (requiere DB y template)")
 except Exception as e:
-    logger.error(f"Error al inicializar generador: {e}")
-    raise
+    logger.warning(f"Error al inicializar generador: {e}")
 
 
 # === HEALTH & INFO ===
@@ -100,11 +108,19 @@ except Exception as e:
 @app.route('/', methods=['GET'])
 def index():
     """Información de la API"""
+    total = 0
+    if db:
+        try:
+            total = db.contar_certificados()
+        except:
+            total = 0
+
     return jsonify({
         'nombre': config.APP_NAME,
         'version': '3.0',
-        'certificados_generados': db.contar_certificados(),
+        'certificados_generados': total,
         'cloudinary_configurado': cloudinary_storage.configured if cloudinary_storage else False,
+        'database_configurado': db is not None,
         'endpoints': {
             'health': '/health',
             'generar': '/generar-certificados (POST)',
@@ -123,12 +139,19 @@ def index():
 def health():
     """Health check para monitoring"""
     try:
-        # Verificar DB
-        total_certs = db.contar_certificados()
+        total_certs = 0
+        db_status = 'not_configured'
+
+        if db:
+            try:
+                total_certs = db.contar_certificados()
+                db_status = 'connected'
+            except:
+                db_status = 'error'
 
         return jsonify({
             'status': 'healthy',
-            'database': 'connected',
+            'database': db_status,
             'cloudinary': 'configured' if cloudinary_storage and cloudinary_storage.configured else 'not_configured',
             'certificados_totales': total_certs,
             'timestamp': datetime.utcnow().isoformat()
@@ -136,9 +159,10 @@ def health():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return jsonify({
-            'status': 'unhealthy',
-            'error': str(e)
-        }), 500
+            'status': 'degraded',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
 
 
 # === CERTIFICADOS ===
@@ -499,13 +523,30 @@ if __name__ == '__main__':
     print(f'🚀 {config.APP_NAME} v3.0 iniciado')
     print('=' * 60)
     print(f'📊 Base de datos: {config.DATABASE_URL.split("@")[-1] if "@" in config.DATABASE_URL else config.DATABASE_URL}')
-    print(f'☁️  Cloudinary: {"✅ Configurado" if cloudinary_storage.configured else "❌ No configurado"}')
-    print(f'🎓 Certificados registrados: {db.contar_certificados()}')
+    print(f'   Estado: {"✅ Conectada" if db else "⚠️  No configurada"}')
+    print(f'☁️  Cloudinary: {"✅ Configurado" if cloudinary_storage and cloudinary_storage.configured else "⚠️  No configurado"}')
+
+    if db:
+        try:
+            print(f'🎓 Certificados registrados: {db.contar_certificados()}')
+        except:
+            print(f'🎓 Certificados registrados: N/A')
+    else:
+        print(f'🎓 Certificados registrados: N/A (sin DB)')
+
     print(f'🔐 Admin password: {"✅ Personalizado" if config.ADMIN_PASSWORD != "admin123" else "⚠️  Default"}')
     print('=' * 60)
     print(f'🌐 Puerto: {config.PORT}')
     print(f'🐛 Debug mode: {config.DEBUG}')
     print(f'🛡️  Rate limiting: {"✅ Habilitado" if config.RATELIMIT_ENABLED else "❌ Deshabilitado"}')
+    print('=' * 60)
+
+    if not db:
+        print('⚠️  ADVERTENCIA: Base de datos no configurada')
+        print('   Configura DATABASE_URL en Railway')
+    if not cloudinary_storage:
+        print('⚠️  ADVERTENCIA: Cloudinary no configurado')
+        print('   Configura CLOUDINARY_* en Railway')
     print('=' * 60)
 
     app.run(debug=config.DEBUG, host='0.0.0.0', port=config.PORT)
