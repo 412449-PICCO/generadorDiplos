@@ -55,25 +55,41 @@ class CloudinaryStorage:
             return None
 
         try:
-            # Subir SVG como raw file
-            result = cloudinary.uploader.upload(
-                f"data:image/svg+xml;base64,{self._encode_svg(svg_content)}",
-                folder=self.folder,
-                public_id=public_id,
-                resource_type='raw',
-                overwrite=True,
-                invalidate=True
-            )
+            import tempfile
+            import os
 
-            logger.info(f"SVG subido exitosamente: {public_id}")
+            # Crear archivo temporal con el SVG
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.svg', delete=False, encoding='utf-8') as tmp:
+                tmp.write(svg_content)
+                tmp_path = tmp.name
 
-            return {
-                'public_id': result['public_id'],
-                'url': result['secure_url'],
-                'format': result['format'],
-                'bytes': result['bytes'],
-                'created_at': result['created_at']
-            }
+            try:
+                # Subir el archivo temporal a Cloudinary
+                result = cloudinary.uploader.upload(
+                    tmp_path,
+                    folder=self.folder,
+                    public_id=public_id,
+                    resource_type='image',  # Usar 'image' para SVG
+                    format='svg',
+                    overwrite=True,
+                    invalidate=True
+                )
+
+                logger.info(f"SVG subido exitosamente: {public_id}")
+
+                return {
+                    'public_id': result['public_id'],
+                    'url': result['secure_url'],
+                    'format': result.get('format', 'svg'),
+                    'bytes': result.get('bytes', 0),
+                    'created_at': result.get('created_at', '')
+                }
+            finally:
+                # Limpiar archivo temporal
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
 
         except Exception as e:
             logger.error(f"Error al subir SVG a Cloudinary: {e}")
