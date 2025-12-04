@@ -69,10 +69,7 @@ class Config:
             errors.append('⚠️  ADMIN_PASSWORD usando valor por defecto (cambiar en producción)')
 
         if not cls.CLOUDINARY_CLOUD_NAME or not cls.CLOUDINARY_API_KEY:
-            errors.append('❌ Cloudinary no configurado (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY)')
-
-        if not cls.SENDGRID_API_KEY:
-            errors.append('⚠️  SendGrid no configurado (emails deshabilitados)')
+            errors.append('⚠️  Cloudinary no configurado (funcionalidad limitada)')
 
         return errors
 

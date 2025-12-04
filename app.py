@@ -49,20 +49,19 @@ app.secret_key = config.SECRET_KEY
 CORS(app)
 
 # Rate Limiting
-if config.RATELIMIT_ENABLED:
-    try:
-        limiter = Limiter(
-            app=app,
-            key_func=get_remote_address,
-            default_limits=[config.RATELIMIT_DEFAULT],
-            storage_uri=config.RATELIMIT_STORAGE_URL
-        )
-        logger.info("Rate limiting habilitado")
-    except Exception as e:
-        logger.warning(f"No se pudo habilitar rate limiting: {e}")
-        limiter = Limiter(app=app, key_func=get_remote_address)
-else:
-    limiter = Limiter(app=app, key_func=get_remote_address)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=[config.RATELIMIT_DEFAULT] if config.RATELIMIT_ENABLED else []
+)
+try:
+    if config.RATELIMIT_ENABLED and config.RATELIMIT_STORAGE_URL:
+        limiter.storage_uri = config.RATELIMIT_STORAGE_URL
+        logger.info("Rate limiting habilitado con Redis")
+    else:
+        logger.warning("Rate limiting usando memoria (no recomendado en producción)")
+except Exception as e:
+    logger.warning(f"Rate limiting configurado sin Redis: {e}")
 
 # Inicializar servicios
 try:
