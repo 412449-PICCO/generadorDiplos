@@ -205,7 +205,7 @@ def generar_certificados():
 @app.route('/certificado/<slug>', methods=['GET'])
 def ver_certificado(slug):
     """
-    Muestra un certificado como HTML
+    Muestra un certificado como HTML con SVG embebido
     """
     try:
         # Buscar en base de datos
@@ -218,8 +218,14 @@ def ver_certificado(slug):
         # Marcar como visto
         db.marcar_como_visto(slug)
 
-        # Obtener SVG desde Cloudinary
-        cloudinary_url = certificado.get('cloudinary_url')
+        # Obtener contenido SVG desde Cloudinary (embebido inline)
+        svg_content = None
+        if cloudinary_storage and cloudinary_storage.configured:
+            svg_content = cloudinary_storage.get_svg_content(certificado['slug'])
+
+        if not svg_content:
+            logger.error(f"No se pudo obtener SVG de Cloudinary: {slug}")
+            return render_template('error.html', mensaje='Error al cargar el certificado'), 500
 
         # Formatear fecha
         fecha = certificado['fecha_generacion']
@@ -229,14 +235,14 @@ def ver_certificado(slug):
         except:
             fecha_formateada = fecha
 
-        # Renderizar template HTML
+        # Renderizar template HTML con SVG embebido
         return render_template(
             'certificado.html',
             nombre=certificado['nombre'],
             email=certificado['email'],
             slug=certificado['slug'],
             fecha=fecha_formateada,
-            cloudinary_url=cloudinary_url,
+            svg_content=svg_content,  # SVG embebido directamente
             url=request.url
         )
 

@@ -77,12 +77,8 @@
 </head>
 <body>
     <div class="certificate-container">
-        <object
-            data="{{ cloudinary_url }}"
-            type="image/svg+xml"
-            aria-label="Certificado de {{ nombre }}">
-            <img src="{{ cloudinary_url }}" alt="Certificado de {{ nombre }}">
-        </object>
+        <!-- SVG embebido directamente - NO SE DESCARGA, SE MUESTRA INLINE -->
+        {{ svg_content | safe }}
     </div>
 </body>
 </html>

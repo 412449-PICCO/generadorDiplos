@@ -118,6 +118,26 @@ class CloudinaryStorage:
             logger.error(f"Error al obtener URL de Cloudinary: {e}")
             return ""
 
+    def get_svg_content(self, public_id: str) -> Optional[str]:
+        """
+        Descarga el contenido del SVG desde Cloudinary
+
+        Args:
+            public_id: ID público del archivo
+
+        Returns:
+            Contenido del SVG como string o None si falla
+        """
+        try:
+            import requests
+            url = self.get_url(public_id)
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            return response.text
+        except Exception as e:
+            logger.error(f"Error al descargar SVG de Cloudinary: {e}")
+            return None
+
     def get_png_url(self, public_id: str, width: int = 1200, height: int = 675) -> str:
         """
         Obtiene URL del SVG convertido a PNG
