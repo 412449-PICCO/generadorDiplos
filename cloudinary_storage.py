@@ -64,19 +64,16 @@ class CloudinaryStorage:
                 tmp_path = tmp.name
 
             try:
-                # Subir el archivo temporal a Cloudinary
+                # Subir el archivo temporal a Cloudinary como raw
+                # raw permite que el navegador lo muestre inline sin forzar descarga
                 result = cloudinary.uploader.upload(
                     tmp_path,
                     folder=self.folder,
                     public_id=public_id,
-                    resource_type='image',  # Usar 'image' para SVG
-                    format='svg',
+                    resource_type='raw',  # Usar 'raw' para servir sin procesar
                     overwrite=True,
                     invalidate=True,
-                    # Preservar dimensiones originales
-                    transformation=None,
-                    quality='auto',
-                    flags='preserve_transparency'
+                    access_mode='public'  # Acceso público sin forzar descarga
                 )
 
                 logger.info(f"SVG subido exitosamente: {public_id}")
@@ -108,19 +105,15 @@ class CloudinaryStorage:
             transformation: Transformaciones opcionales (resize, format, etc)
 
         Returns:
-            URL del archivo con flags para mostrar inline (no descargar)
+            URL del archivo para visualización inline en navegador
         """
         try:
-            # Por defecto, incluir flags para attachment inline
-            default_params = {
-                'flags': 'attachment:inline',  # Mostrar en navegador, no descargar
-                'resource_type': 'image'
-            }
+            # Construir URL directa para raw resources - se muestra inline por defecto
+            # Formato: https://res.cloudinary.com/{cloud_name}/raw/upload/{folder}/{public_id}.svg
+            from cloudinary import config as cloudinary_config
+            cloud_name = cloudinary_config().cloud_name
 
-            if transformation:
-                default_params.update(transformation)
-
-            return cloudinary.CloudinaryImage(f"{self.folder}/{public_id}").build_url(**default_params)
+            return f"https://res.cloudinary.com/{cloud_name}/raw/upload/{self.folder}/{public_id}.svg"
         except Exception as e:
             logger.error(f"Error al obtener URL de Cloudinary: {e}")
             return ""
@@ -128,6 +121,7 @@ class CloudinaryStorage:
     def get_png_url(self, public_id: str, width: int = 1200, height: int = 675) -> str:
         """
         Obtiene URL del SVG convertido a PNG
+        NOTA: No disponible con resource_type='raw', retorna URL del SVG
 
         Args:
             public_id: ID público del archivo
@@ -135,17 +129,11 @@ class CloudinaryStorage:
             height: Alto del PNG
 
         Returns:
-            URL del PNG
+            URL del SVG (conversión a PNG no disponible con raw)
         """
-        return self.get_url(
-            public_id,
-            transformation={
-                'format': 'png',
-                'width': width,
-                'height': height,
-                'crop': 'fit'
-            }
-        )
+        # Con resource_type='raw' no hay transformaciones disponibles
+        # Retornar la URL del SVG directamente
+        return self.get_url(public_id)
 
     def delete(self, public_id: str) -> bool:
         """
