@@ -219,9 +219,18 @@ def ver_certificado(slug):
         db.marcar_como_visto(slug)
 
         # Obtener contenido SVG desde Cloudinary (embebido inline)
+        # Usar la URL guardada en la DB directamente
         svg_content = None
-        if cloudinary_storage and cloudinary_storage.configured:
-            svg_content = cloudinary_storage.get_svg_content(certificado['slug'])
+        cloudinary_url = certificado.get('cloudinary_url')
+
+        if cloudinary_url:
+            try:
+                import requests
+                response = requests.get(cloudinary_url, timeout=10)
+                response.raise_for_status()
+                svg_content = response.text
+            except Exception as e:
+                logger.error(f"Error al descargar SVG de Cloudinary: {e}")
 
         if not svg_content:
             logger.error(f"No se pudo obtener SVG de Cloudinary: {slug}")
