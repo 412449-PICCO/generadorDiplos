@@ -72,7 +72,11 @@ class CloudinaryStorage:
                     resource_type='image',  # Usar 'image' para SVG
                     format='svg',
                     overwrite=True,
-                    invalidate=True
+                    invalidate=True,
+                    # Preservar dimensiones originales
+                    transformation=None,
+                    quality='auto',
+                    flags='preserve_transparency'
                 )
 
                 logger.info(f"SVG subido exitosamente: {public_id}")
@@ -97,20 +101,26 @@ class CloudinaryStorage:
 
     def get_url(self, public_id: str, transformation: Optional[Dict] = None) -> str:
         """
-        Obtiene la URL de un archivo en Cloudinary
+        Obtiene la URL de un archivo en Cloudinary para visualización inline
 
         Args:
             public_id: ID público del archivo
             transformation: Transformaciones opcionales (resize, format, etc)
 
         Returns:
-            URL del archivo
+            URL del archivo con flags para mostrar inline (no descargar)
         """
         try:
+            # Por defecto, incluir flags para attachment inline
+            default_params = {
+                'flags': 'attachment:inline',  # Mostrar en navegador, no descargar
+                'resource_type': 'image'
+            }
+
             if transformation:
-                return cloudinary.CloudinaryImage(f"{self.folder}/{public_id}").build_url(**transformation)
-            else:
-                return cloudinary.CloudinaryImage(f"{self.folder}/{public_id}").build_url()
+                default_params.update(transformation)
+
+            return cloudinary.CloudinaryImage(f"{self.folder}/{public_id}").build_url(**default_params)
         except Exception as e:
             logger.error(f"Error al obtener URL de Cloudinary: {e}")
             return ""
