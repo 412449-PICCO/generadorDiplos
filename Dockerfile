@@ -57,5 +57,6 @@ RUN mkdir -p certificados
 # Exponer puerto (Railway usa variable PORT)
 EXPOSE 8000
 
-# Comando de inicio
-CMD python app.py
+# Comando de inicio con Gunicorn para producción
+# Usar formato shell para expandir variables de entorno
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 4 --timeout 120 --access-logfile - --error-logfile - app:app"]

@@ -1,151 +1,276 @@
-import sqlite3
+"""
+Capa de acceso a datos usando SQLAlchemy
+Soporta SQLite (desarrollo) y PostgreSQL (producción)
+"""
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Index
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime
-import os
+from typing import Optional, List, Dict
+import logging
+
+logger = logging.getLogger(__name__)
+
+Base = declarative_base()
+
+
+class Certificado(Base):
+    """Modelo de Certificado"""
+    __tablename__ = 'certificados'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    slug = Column(String(255), unique=True, nullable=False, index=True)
+    nombre = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False)
+    cloudinary_url = Column(String(500), nullable=False)  # URL de Cloudinary
+    cloudinary_public_id = Column(String(255), nullable=False)  # Public ID de Cloudinary
+    fecha_generacion = Column(DateTime, default=datetime.utcnow, nullable=False)
+    visto = Column(Integer, default=0, nullable=False)
+    ultima_visita = Column(DateTime, nullable=True)
+
+    # Índices adicionales
+    __table_args__ = (
+        Index('idx_email', 'email'),
+        Index('idx_nombre', 'nombre'),
+        Index('idx_fecha_generacion', 'fecha_generacion'),
+    )
+
+    def to_dict(self) -> Dict:
+        """Convierte el modelo a diccionario"""
+        return {
+            'id': self.id,
+            'slug': self.slug,
+            'nombre': self.nombre,
+            'email': self.email,
+            'cloudinary_url': self.cloudinary_url,
+            'cloudinary_public_id': self.cloudinary_public_id,
+            'fecha_generacion': self.fecha_generacion.strftime('%Y-%m-%d %H:%M:%S') if self.fecha_generacion else None,
+            'visto': self.visto,
+            'ultima_visita': self.ultima_visita.strftime('%Y-%m-%d %H:%M:%S') if self.ultima_visita else None
+        }
 
 
 class Database:
-    def __init__(self, db_path='certificados.db'):
-        """Inicializa la conexión a la base de datos"""
-        self.db_path = db_path
-        self.init_db()
+    """Clase para manejar operaciones de base de datos"""
 
-    def get_connection(self):
-        """Obtiene una conexión a la base de datos"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Para obtener resultados como diccionarios
-        return conn
+    def __init__(self, database_url: str = 'sqlite:///certificados.db'):
+        """
+        Inicializa la conexión a la base de datos
+
+        Args:
+            database_url: URL de conexión a la base de datos
+                         - SQLite: sqlite:///certificados.db
+                         - PostgreSQL: postgresql://user:pass@host:port/db
+        """
+        self.database_url = database_url
+        self.engine = create_engine(
+            database_url,
+            echo=False,  # Cambiar a True para debug SQL
+            pool_pre_ping=True,  # Verificar conexiones antes de usar
+            pool_size=10,  # Tamaño del pool de conexiones
+            max_overflow=20  # Conexiones adicionales permitidas
+        )
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        self.init_db()
+        logger.info(f"Base de datos inicializada: {database_url.split('@')[-1] if '@' in database_url else database_url}")
 
     def init_db(self):
         """Crea las tablas si no existen"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS certificados (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                slug TEXT UNIQUE NOT NULL,
-                nombre TEXT NOT NULL,
-                email TEXT NOT NULL,
-                archivo_svg TEXT NOT NULL,
-                fecha_generacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                visto INTEGER DEFAULT 0,
-                ultima_visita TIMESTAMP
-            )
-        ''')
-
-        # Crear índice para búsquedas rápidas por slug
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_slug
-            ON certificados(slug)
-        ''')
-
-        conn.commit()
-        conn.close()
-
-    def guardar_certificado(self, slug, nombre, email, archivo_svg):
-        """Guarda un certificado en la base de datos"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
         try:
-            cursor.execute('''
-                INSERT INTO certificados (slug, nombre, email, archivo_svg)
-                VALUES (?, ?, ?, ?)
-            ''', (slug, nombre, email, archivo_svg))
-            conn.commit()
+            Base.metadata.create_all(bind=self.engine)
+            logger.info("Tablas de base de datos creadas/verificadas")
+        except Exception as e:
+            logger.error(f"Error al crear tablas: {e}")
+            raise
+
+    def get_session(self) -> Session:
+        """Obtiene una sesión de base de datos"""
+        return self.SessionLocal()
+
+    def guardar_certificado(
+        self,
+        slug: str,
+        nombre: str,
+        email: str,
+        cloudinary_url: str,
+        cloudinary_public_id: str
+    ) -> bool:
+        """
+        Guarda un certificado en la base de datos
+
+        Args:
+            slug: Slug único del certificado
+            nombre: Nombre del participante
+            email: Email del participante
+            cloudinary_url: URL del certificado en Cloudinary
+            cloudinary_public_id: Public ID en Cloudinary
+
+        Returns:
+            True si se guardó correctamente, False si ya existe
+        """
+        session = self.get_session()
+        try:
+            certificado = Certificado(
+                slug=slug,
+                nombre=nombre,
+                email=email,
+                cloudinary_url=cloudinary_url,
+                cloudinary_public_id=cloudinary_public_id
+            )
+            session.add(certificado)
+            session.commit()
+            logger.info(f"Certificado guardado: {slug}")
             return True
-        except sqlite3.IntegrityError:
-            # El slug ya existe
+        except IntegrityError:
+            session.rollback()
+            logger.warning(f"Certificado duplicado: {slug}")
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error al guardar certificado: {e}")
             return False
         finally:
-            conn.close()
+            session.close()
 
-    def obtener_certificado(self, slug):
-        """Obtiene un certificado por su slug"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+    def obtener_certificado(self, slug: str) -> Optional[Dict]:
+        """
+        Obtiene un certificado por su slug
 
-        cursor.execute('''
-            SELECT * FROM certificados WHERE slug = ?
-        ''', (slug,))
+        Args:
+            slug: Slug del certificado
 
-        certificado = cursor.fetchone()
-        conn.close()
+        Returns:
+            Diccionario con datos del certificado o None si no existe
+        """
+        session = self.get_session()
+        try:
+            certificado = session.query(Certificado).filter(Certificado.slug == slug).first()
+            if certificado:
+                return certificado.to_dict()
+            return None
+        except Exception as e:
+            logger.error(f"Error al obtener certificado: {e}")
+            return None
+        finally:
+            session.close()
 
-        if certificado:
-            return dict(certificado)
-        return None
+    def marcar_como_visto(self, slug: str) -> bool:
+        """
+        Marca un certificado como visto y actualiza la última visita
 
-    def marcar_como_visto(self, slug):
-        """Marca un certificado como visto y actualiza la última visita"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        Args:
+            slug: Slug del certificado
 
-        cursor.execute('''
-            UPDATE certificados
-            SET visto = visto + 1,
-                ultima_visita = CURRENT_TIMESTAMP
-            WHERE slug = ?
-        ''', (slug,))
+        Returns:
+            True si se actualizó correctamente
+        """
+        session = self.get_session()
+        try:
+            certificado = session.query(Certificado).filter(Certificado.slug == slug).first()
+            if certificado:
+                certificado.visto += 1
+                certificado.ultima_visita = datetime.utcnow()
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error al marcar como visto: {e}")
+            return False
+        finally:
+            session.close()
 
-        conn.commit()
-        conn.close()
+    def listar_certificados(self, limite: int = 100, offset: int = 0) -> List[Dict]:
+        """
+        Lista todos los certificados con paginación
 
-    def listar_certificados(self, limite=100, offset=0):
-        """Lista todos los certificados"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        Args:
+            limite: Número máximo de resultados
+            offset: Desplazamiento para paginación
 
-        cursor.execute('''
-            SELECT * FROM certificados
-            ORDER BY fecha_generacion DESC
-            LIMIT ? OFFSET ?
-        ''', (limite, offset))
+        Returns:
+            Lista de diccionarios con certificados
+        """
+        session = self.get_session()
+        try:
+            certificados = (
+                session.query(Certificado)
+                .order_by(Certificado.fecha_generacion.desc())
+                .limit(limite)
+                .offset(offset)
+                .all()
+            )
+            return [cert.to_dict() for cert in certificados]
+        except Exception as e:
+            logger.error(f"Error al listar certificados: {e}")
+            return []
+        finally:
+            session.close()
 
-        certificados = cursor.fetchall()
-        conn.close()
+    def contar_certificados(self) -> int:
+        """
+        Cuenta el total de certificados
 
-        return [dict(cert) for cert in certificados]
+        Returns:
+            Número total de certificados
+        """
+        session = self.get_session()
+        try:
+            count = session.query(Certificado).count()
+            return count
+        except Exception as e:
+            logger.error(f"Error al contar certificados: {e}")
+            return 0
+        finally:
+            session.close()
 
-    def contar_certificados(self):
-        """Cuenta el total de certificados"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+    def buscar_por_email(self, email: str) -> List[Dict]:
+        """
+        Busca certificados por email
 
-        cursor.execute('SELECT COUNT(*) as total FROM certificados')
-        resultado = cursor.fetchone()
-        conn.close()
+        Args:
+            email: Email a buscar (búsqueda parcial)
 
-        return resultado['total']
+        Returns:
+            Lista de certificados que coinciden
+        """
+        session = self.get_session()
+        try:
+            certificados = (
+                session.query(Certificado)
+                .filter(Certificado.email.ilike(f'%{email}%'))
+                .order_by(Certificado.fecha_generacion.desc())
+                .all()
+            )
+            return [cert.to_dict() for cert in certificados]
+        except Exception as e:
+            logger.error(f"Error al buscar por email: {e}")
+            return []
+        finally:
+            session.close()
 
-    def buscar_por_email(self, email):
-        """Busca certificados por email"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
+    def buscar_por_nombre(self, nombre: str) -> List[Dict]:
+        """
+        Busca certificados por nombre
 
-        cursor.execute('''
-            SELECT * FROM certificados
-            WHERE email LIKE ?
-            ORDER BY fecha_generacion DESC
-        ''', (f'%{email}%',))
+        Args:
+            nombre: Nombre a buscar (búsqueda parcial)
 
-        certificados = cursor.fetchall()
-        conn.close()
-
-        return [dict(cert) for cert in certificados]
-
-    def buscar_por_nombre(self, nombre):
-        """Busca certificados por nombre"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            SELECT * FROM certificados
-            WHERE nombre LIKE ?
-            ORDER BY fecha_generacion DESC
-        ''', (f'%{nombre}%',))
-
-        certificados = cursor.fetchall()
-        conn.close()
-
-        return [dict(cert) for cert in certificados]
+        Returns:
+            Lista de certificados que coinciden
+        """
+        session = self.get_session()
+        try:
+            certificados = (
+                session.query(Certificado)
+                .filter(Certificado.nombre.ilike(f'%{nombre}%'))
+                .order_by(Certificado.fecha_generacion.desc())
+                .all()
+            )
+            return [cert.to_dict() for cert in certificados]
+        except Exception as e:
+            logger.error(f"Error al buscar por nombre: {e}")
+            return []
+        finally:
+            session.close()

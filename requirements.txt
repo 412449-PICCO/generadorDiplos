@@ -1,2 +1,32 @@
+# Web Framework
 flask>=3.0.0
+
+# SVG to PNG conversion
 playwright>=1.40.0
+
+# Database
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.23
+
+# Cloud Storage
+cloudinary>=1.36.0
+
+# Validation
+pydantic>=2.5.0
+email-validator>=2.1.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Security
+flask-limiter>=3.5.0
+flask-cors>=4.0.0
+
+# Redis for rate limiting
+redis>=5.0.1
+
+# Logging
+python-json-logger>=2.0.7
+
+# Utils
+gunicorn>=21.2.0
