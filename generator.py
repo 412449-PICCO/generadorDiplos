@@ -6,6 +6,7 @@ from datetime import datetime
 from utils import generar_slug_unico
 from typing import Optional, Dict, Any
 import logging
+from text_to_path import convert_svg_text_to_paths
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,13 @@ class CertificateGenerator:
 
             # Reemplazar el placeholder del nombre
             svg_personalizado = svg_content.replace('{{NOMBRE}}', nombre)
+
+            # Convertir texto a paths para garantizar visualización consistente
+            font_path = os.path.join(os.path.dirname(__file__), 'fonts', 'Montserrat-ExtraBold.ttf')
+            svg_personalizado = convert_svg_text_to_paths(
+                svg_personalizado,
+                font_path
+            )
 
             # Generar slug único para este certificado (ej: "frank-vargas")
             if self.database:

@@ -4,6 +4,9 @@ flask>=3.0.0
 # SVG to PNG conversion
 playwright>=1.40.0
 
+# Font handling for text-to-path conversion
+fonttools>=4.61.0
+
 # Database
 psycopg2-binary>=2.9.9
 sqlalchemy>=2.0.23
