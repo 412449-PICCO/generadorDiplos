@@ -30,3 +30,4 @@ python-json-logger>=2.0.7
 
 # Utils
 gunicorn>=21.2.0
+requests>=2.31.0
