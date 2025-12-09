@@ -103,18 +103,30 @@ def convert_svg_text_to_paths(svg_content: str, font_path: str) -> str:
     Returns:
         SVG con texto convertido a paths
     """
-    # Parse SVG
-    # Remover namespace si existe para facilitar el parsing
-    svg_content_clean = re.sub(r'\sxmlns="[^"]+"', '', svg_content, count=1)
+    # Registrar namespaces ANTES de parsear para preservarlos
+    ET.register_namespace('', 'http://www.w3.org/2000/svg')
+    ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
 
     try:
-        root = ET.fromstring(svg_content_clean)
-    except ET.ParseError:
-        # Si falla, intentar con el contenido original
-        root = ET.fromstring(svg_content)
+        root = ET.fromstring(svg_content.encode('utf-8'))
+    except ET.ParseError as e:
+        # Si falla, intentar limpiando namespaces
+        svg_content_clean = re.sub(r'\sxmlns="[^"]+"', '', svg_content, count=1)
+        try:
+            root = ET.fromstring(svg_content_clean.encode('utf-8'))
+        except ET.ParseError:
+            # Si aún falla, devolver el contenido original
+            print(f"Error al parsear SVG: {e}")
+            return svg_content
 
-    # Buscar todos los elementos <text>
-    text_elements = root.findall('.//text')
+    # Buscar todos los elementos <text> con namespace correcto
+    # Usar búsqueda con namespace explícito
+    ns = {'svg': 'http://www.w3.org/2000/svg'}
+    text_elements = root.findall('.//{http://www.w3.org/2000/svg}text')
+
+    # Si no encuentra con namespace, buscar sin él
+    if not text_elements:
+        text_elements = root.findall('.//text')
 
     for text_elem in text_elements:
         # Solo convertir elementos que usan Montserrat
@@ -123,7 +135,10 @@ def convert_svg_text_to_paths(svg_content: str, font_path: str) -> str:
             continue
 
         # Buscar el tspan dentro del text
-        tspan = text_elem.find('.//tspan')
+        tspan = text_elem.find('.//{http://www.w3.org/2000/svg}tspan')
+        if tspan is None:
+            tspan = text_elem.find('.//tspan')
+
         if tspan is None or not tspan.text:
             continue
 
@@ -168,26 +183,26 @@ def convert_svg_text_to_paths(svg_content: str, font_path: str) -> str:
         # Parsear los paths y agregarlos al grupo
         for path_line in paths_svg.split('\n'):
             if path_line.strip():
-                path_elem = ET.fromstring(path_line)
-                group.append(path_elem)
+                try:
+                    path_elem = ET.fromstring(path_line)
+                    group.append(path_elem)
+                except ET.ParseError:
+                    # Si falla el parsing de un path, continuar con el siguiente
+                    continue
 
         # Reemplazar el elemento text con el grupo
-        parent = root.find('.//*[text="{0}"]/../..'.format(text_elem))
-        if parent is None:
-            # Si no encontramos el parent, buscar en root
-            for elem in root.iter():
-                if text_elem in list(elem):
-                    parent = elem
-                    break
+        parent = None
+        for elem in root.iter():
+            if text_elem in list(elem):
+                parent = elem
+                break
 
         if parent is not None:
             index = list(parent).index(text_elem)
             parent.remove(text_elem)
             parent.insert(index, group)
 
-    # Convertir de vuelta a string
-    # Agregar namespace SVG
-    ET.register_namespace('', 'http://www.w3.org/2000/svg')
+    # Convertir de vuelta a string preservando namespaces
     result = ET.tostring(root, encoding='unicode', method='xml')
 
     # Agregar declaración XML si no existe
