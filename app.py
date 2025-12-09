@@ -205,9 +205,12 @@ def generar_certificados():
 @app.route('/certificado/<slug>', methods=['GET'])
 def ver_certificado(slug):
     """
-    Muestra un certificado como HTML con SVG embebido
+    Muestra un certificado como PDF embebido en el navegador
     """
     try:
+        from pdf_generator import svg_to_pdf
+        import requests
+
         # Buscar en base de datos
         certificado = db.obtener_certificado(slug)
 
@@ -218,14 +221,12 @@ def ver_certificado(slug):
         # Marcar como visto
         db.marcar_como_visto(slug)
 
-        # Obtener contenido SVG desde Cloudinary (embebido inline)
-        # Usar la URL guardada en la DB directamente
+        # Obtener contenido SVG desde Cloudinary
         svg_content = None
         cloudinary_url = certificado.get('cloudinary_url')
 
         if cloudinary_url:
             try:
-                import requests
                 response = requests.get(cloudinary_url, timeout=10)
                 response.raise_for_status()
                 svg_content = response.text
@@ -236,23 +237,15 @@ def ver_certificado(slug):
             logger.error(f"No se pudo obtener SVG de Cloudinary: {slug}")
             return render_template('error.html', mensaje='Error al cargar el certificado'), 500
 
-        # Formatear fecha
-        fecha = certificado['fecha_generacion']
-        try:
-            fecha_obj = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S')
-            fecha_formateada = fecha_obj.strftime('%d de %B de %Y')
-        except:
-            fecha_formateada = fecha
+        # Generar PDF desde SVG
+        pdf_path = svg_to_pdf(svg_content)
 
-        # Renderizar template HTML con SVG embebido
-        return render_template(
-            'certificado.html',
-            nombre=certificado['nombre'],
-            email=certificado['email'],
-            slug=certificado['slug'],
-            fecha=fecha_formateada,
-            svg_content=svg_content,  # SVG embebido directamente
-            url=request.url
+        # Servir PDF embebido en el navegador (inline, no como descarga)
+        return send_file(
+            pdf_path,
+            mimetype='application/pdf',
+            as_attachment=False,  # Inline para que el navegador lo muestre
+            download_name=f'certificado-{slug}.pdf'
         )
 
     except Exception as e:
@@ -300,6 +293,55 @@ def descargar_certificado(slug):
     except Exception as e:
         logger.error(f"Error al descargar certificado {slug}: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/certificado/<slug>/pdf', methods=['GET'])
+def descargar_certificado_pdf(slug):
+    """
+    Genera y descarga el certificado como PDF
+    """
+    try:
+        from pdf_generator import svg_to_pdf
+        import tempfile
+
+        # Buscar en base de datos
+        certificado = db.obtener_certificado(slug)
+
+        if not certificado:
+            logger.warning(f"Certificado no encontrado: {slug}")
+            return jsonify({'error': 'Certificado no encontrado'}), 404
+
+        # Obtener contenido SVG desde Cloudinary
+        svg_content = None
+        cloudinary_url = certificado.get('cloudinary_url')
+
+        if cloudinary_url:
+            try:
+                import requests
+                response = requests.get(cloudinary_url, timeout=10)
+                response.raise_for_status()
+                svg_content = response.text
+            except Exception as e:
+                logger.error(f"Error al descargar SVG de Cloudinary: {e}")
+
+        if not svg_content:
+            logger.error(f"No se pudo obtener SVG de Cloudinary: {slug}")
+            return jsonify({'error': 'Error al cargar el certificado'}), 500
+
+        # Generar PDF
+        pdf_path = svg_to_pdf(svg_content)
+
+        # Enviar archivo PDF
+        return send_file(
+            pdf_path,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'certificado-{slug}.pdf'
+        )
+
+    except Exception as e:
+        logger.error(f"Error al generar PDF para {slug}: {e}", exc_info=True)
+        return jsonify({'error': 'Error al generar PDF'}), 500
 
 
 @app.route('/listar-certificados', methods=['GET'])
