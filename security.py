@@ -18,7 +18,13 @@ def require_admin_ip(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        client_ip = request.remote_addr
+        # Obtener IP real considerando proxies (Railway, Cloudflare, etc.)
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+
+        # X-Forwarded-For puede tener múltiples IPs separadas por coma (client, proxy1, proxy2)
+        # La primera es la IP real del cliente
+        if ',' in client_ip:
+            client_ip = client_ip.split(',')[0].strip()
 
         # Si no hay IPs configuradas, denegar acceso en producción
         if not config.ADMIN_ALLOWED_IPS:
@@ -31,10 +37,10 @@ def require_admin_ip(f):
 
         # Verificar si la IP está en la lista permitida
         if config.ADMIN_ALLOWED_IPS and client_ip not in config.ADMIN_ALLOWED_IPS:
-            logger.warning(f"Acceso denegado desde IP no autorizada: {client_ip}")
+            logger.warning(f"Acceso denegado desde IP no autorizada: {client_ip} (configuradas: {config.ADMIN_ALLOWED_IPS})")
             return jsonify({
                 'error': 'Acceso denegado',
-                'message': 'Tu IP no tiene permisos para acceder a este recurso'
+                'message': f'Tu IP ({client_ip}) no tiene permisos para acceder a este recurso'
             }), 403
 
         logger.info(f"Acceso autorizado desde IP: {client_ip}")
