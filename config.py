@@ -57,6 +57,12 @@ class Config:
     RATELIMIT_ENABLED = os.getenv('RATELIMIT_ENABLED', 'True').lower() == 'true'
     RATELIMIT_DEFAULT = os.getenv('RATELIMIT_DEFAULT', '100 per hour')
 
+    # Security
+    ADMIN_ALLOWED_IPS = os.getenv('ADMIN_ALLOWED_IPS', '').split(',') if os.getenv('ADMIN_ALLOWED_IPS') else []
+    # En desarrollo, permitir localhost
+    if not ADMIN_ALLOWED_IPS and DEBUG:
+        ADMIN_ALLOWED_IPS = ['127.0.0.1', 'localhost']
+
     @classmethod
     def validate(cls):
         """Valida que las configuraciones críticas estén presentes"""

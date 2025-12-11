@@ -21,6 +21,12 @@ from schemas import (
     GenerarCertificadosRequest,
     ParticipanteSchema
 )
+from security import (
+    require_admin_ip,
+    validate_slug,
+    validate_cloudinary_url,
+    sanitize_error_message
+)
 
 # Configuración de logging estructurado
 def setup_logging():
@@ -169,9 +175,11 @@ def health():
 
 @app.route('/generar-certificados', methods=['POST'])
 @limiter.limit("10 per minute")
+@require_admin_ip  # Solo IPs autorizadas - Endpoint administrativo
 def generar_certificados():
     """
-    Genera certificados para una lista de participantes
+    Genera certificados para una lista de participantes.
+    Protegido por IP whitelist - Solo para administradores.
     """
     try:
         data = request.get_json()
@@ -187,7 +195,7 @@ def generar_certificados():
         participantes = [p.dict() for p in request_data.participantes]
         resultado = generator.generar_batch(participantes)
 
-        logger.info(f"Batch generado: {resultado['exitosos']} exitosos, {resultado['errores']} errores")
+        logger.info(f"Batch generado desde IP {request.remote_addr}: {resultado['exitosos']} exitosos, {resultado['errores']} errores")
 
         return jsonify({
             'mensaje': f'Proceso completado. {resultado["exitosos"]} certificados generados',
@@ -203,13 +211,20 @@ def generar_certificados():
 
 
 @app.route('/certificado/<slug>', methods=['GET'])
+@limiter.limit("10 per minute")  # Protección contra DoS
 def ver_certificado(slug):
     """
-    Muestra un certificado como PDF embebido en el navegador
+    Muestra un certificado como PDF embebido en el navegador.
+    Endpoint público con rate limiting.
     """
     try:
         from pdf_generator import svg_to_pdf
         import requests
+
+        # Validar slug para prevenir path traversal
+        if not validate_slug(slug):
+            logger.warning(f"Slug inválido rechazado: {slug}")
+            return render_template('error.html', mensaje='Certificado no encontrado'), 404
 
         # Buscar en base de datos
         certificado = db.obtener_certificado(slug)
@@ -225,11 +240,23 @@ def ver_certificado(slug):
         svg_content = None
         cloudinary_url = certificado.get('cloudinary_url')
 
+        # Validar URL de Cloudinary para prevenir SSRF
+        if cloudinary_url and not validate_cloudinary_url(cloudinary_url):
+            logger.error(f"URL de Cloudinary inválida: {cloudinary_url}")
+            return render_template('error.html', mensaje='Error de configuración'), 500
+
         if cloudinary_url:
             try:
-                response = requests.get(cloudinary_url, timeout=10)
+                # Timeout reducido de 10s a 3s para prevenir slowloris
+                response = requests.get(cloudinary_url, timeout=3)
                 response.raise_for_status()
                 svg_content = response.text
+
+                # Verificar tamaño del SVG (máximo 5MB)
+                if len(svg_content) > 5 * 1024 * 1024:
+                    logger.error(f"SVG demasiado grande: {len(svg_content)} bytes")
+                    return render_template('error.html', mensaje='Error al cargar el certificado'), 500
+
             except Exception as e:
                 logger.error(f"Error al descargar SVG de Cloudinary: {e}")
 
@@ -254,11 +281,18 @@ def ver_certificado(slug):
 
 
 @app.route('/preview/<slug>', methods=['GET'])
+@limiter.limit("30 per minute")  # Protección contra DoS
 def preview_certificado(slug):
     """
-    Genera una vista previa PNG del certificado para redes sociales (Open Graph)
+    Genera una vista previa PNG del certificado para redes sociales (Open Graph).
+    Endpoint público con rate limiting.
     """
     try:
+        # Validar slug
+        if not validate_slug(slug):
+            logger.warning(f"Slug inválido rechazado en preview: {slug}")
+            return jsonify({'error': 'Certificado no encontrado'}), 404
+
         certificado = db.obtener_certificado(slug)
 
         if not certificado:
@@ -273,36 +307,56 @@ def preview_certificado(slug):
 
     except Exception as e:
         logger.error(f"Error al generar preview {slug}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @app.route('/descargar/<slug>', methods=['GET'])
+@limiter.limit("20 per minute")  # Protección contra DoS
 def descargar_certificado(slug):
     """
-    Redirige a la URL de Cloudinary para descargar el SVG
+    Redirige a la URL de Cloudinary para descargar el SVG.
+    Endpoint público con rate limiting.
     """
     try:
+        # Validar slug
+        if not validate_slug(slug):
+            logger.warning(f"Slug inválido rechazado en descargar: {slug}")
+            return jsonify({'error': 'Certificado no encontrado'}), 404
+
         certificado = db.obtener_certificado(slug)
 
         if not certificado:
             return jsonify({'error': 'Certificado no encontrado'}), 404
 
         cloudinary_url = certificado.get('cloudinary_url')
+
+        # Validar URL de Cloudinary
+        if not validate_cloudinary_url(cloudinary_url):
+            logger.error(f"URL de Cloudinary inválida en descargar: {cloudinary_url}")
+            return jsonify({'error': 'Error de configuración'}), 500
+
         return redirect(cloudinary_url)
 
     except Exception as e:
         logger.error(f"Error al descargar certificado {slug}: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @app.route('/certificado/<slug>/pdf', methods=['GET'])
+@limiter.limit("10 per minute")  # Protección contra DoS
 def descargar_certificado_pdf(slug):
     """
-    Genera y descarga el certificado como PDF
+    Genera y descarga el certificado como PDF.
+    Endpoint público con rate limiting.
     """
     try:
         from pdf_generator import svg_to_pdf
-        import tempfile
+        import requests
+
+        # Validar slug
+        if not validate_slug(slug):
+            logger.warning(f"Slug inválido rechazado en PDF: {slug}")
+            return jsonify({'error': 'Certificado no encontrado'}), 404
 
         # Buscar en base de datos
         certificado = db.obtener_certificado(slug)
@@ -315,12 +369,23 @@ def descargar_certificado_pdf(slug):
         svg_content = None
         cloudinary_url = certificado.get('cloudinary_url')
 
+        # Validar URL de Cloudinary
+        if cloudinary_url and not validate_cloudinary_url(cloudinary_url):
+            logger.error(f"URL de Cloudinary inválida: {cloudinary_url}")
+            return jsonify({'error': 'Error de configuración'}), 500
+
         if cloudinary_url:
             try:
-                import requests
-                response = requests.get(cloudinary_url, timeout=10)
+                # Timeout reducido de 10s a 3s
+                response = requests.get(cloudinary_url, timeout=3)
                 response.raise_for_status()
                 svg_content = response.text
+
+                # Verificar tamaño del SVG (máximo 5MB)
+                if len(svg_content) > 5 * 1024 * 1024:
+                    logger.error(f"SVG demasiado grande: {len(svg_content)} bytes")
+                    return jsonify({'error': 'Error al cargar el certificado'}), 500
+
             except Exception as e:
                 logger.error(f"Error al descargar SVG de Cloudinary: {e}")
 
@@ -424,33 +489,36 @@ def buscar_por_nombre(nombre):
 # === ADMIN PANEL ===
 
 @app.route('/admin', methods=['GET'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_redirect():
-    """Redirige a login o dashboard"""
+    """Redirige a login o dashboard. Protegido por IP whitelist."""
     if 'admin_logged_in' in session:
         return redirect('/admin/dashboard')
     return redirect('/admin/login')
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_login():
-    """Página de login del admin"""
+    """Página de login del admin. Protegido por IP whitelist."""
     if request.method == 'POST':
         password = request.form.get('password')
 
         if password == config.ADMIN_PASSWORD:
             session['admin_logged_in'] = True
-            logger.info("Admin login exitoso")
+            logger.info(f"Admin login exitoso desde IP: {request.remote_addr}")
             return redirect('/admin/dashboard')
         else:
-            logger.warning("Intento de login fallido")
+            logger.warning(f"Intento de login fallido desde IP: {request.remote_addr}")
             return render_template('admin_login.html', error='Clave incorrecta')
 
     return render_template('admin_login.html')
 
 
 @app.route('/admin/dashboard', methods=['GET'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_dashboard():
-    """Dashboard principal del admin"""
+    """Dashboard principal del admin. Protegido por IP whitelist."""
     if 'admin_logged_in' not in session:
         return redirect('/admin/login')
 
@@ -475,8 +543,9 @@ def admin_dashboard():
 
 
 @app.route('/admin/generar', methods=['POST'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_generar():
-    """Genera certificados desde el admin"""
+    """Genera certificados desde el admin. Protegido por IP whitelist."""
     if 'admin_logged_in' not in session:
         return jsonify({'error': 'No autorizado'}), 401
 
@@ -494,8 +563,9 @@ def admin_generar():
 
 
 @app.route('/admin/exportar', methods=['GET'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_exportar():
-    """Exporta lista de certificados en CSV"""
+    """Exporta lista de certificados en CSV. Protegido por IP whitelist."""
     if 'admin_logged_in' not in session:
         return redirect('/admin/login')
 
@@ -538,10 +608,11 @@ def admin_exportar():
 
 
 @app.route('/admin/logout', methods=['GET'])
+@require_admin_ip  # Solo IPs autorizadas
 def admin_logout():
-    """Cerrar sesión del admin"""
+    """Cerrar sesión del admin. Protegido por IP whitelist."""
     session.pop('admin_logged_in', None)
-    logger.info("Admin logout")
+    logger.info(f"Admin logout desde IP: {request.remote_addr}")
     return redirect('/admin/login')
 
 
