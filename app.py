@@ -625,7 +625,11 @@ def not_found(e):
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
-    return jsonify({'error': 'Demasiadas solicitudes', 'details': str(e.description)}), 429
+    """Handler para rate limiting - no revelar detalles técnicos"""
+    return jsonify({
+        'error': 'Demasiadas solicitudes',
+        'message': 'Has excedido el límite de solicitudes. Intenta de nuevo en unos minutos.'
+    }), 429
 
 
 @app.errorhandler(500)
