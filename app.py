@@ -607,6 +607,72 @@ def admin_exportar():
         return f'Error: {e}', 500
 
 
+@app.route('/admin/exportar-excel', methods=['GET'])
+@require_admin_ip  # Solo IPs autorizadas
+def admin_exportar_excel():
+    """Exporta lista de certificados en Excel. Protegido por IP whitelist."""
+    if 'admin_logged_in' not in session:
+        return redirect('/admin/login')
+
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from io import BytesIO
+
+        certificados = db.listar_certificados(limite=10000)
+
+        # Crear workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Certificados"
+
+        # Estilo para el header
+        header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+
+        # Headers
+        headers = ['Nombre', 'Email', 'Slug', 'URL Completa', 'Visto', 'Fecha', 'Cloudinary URL']
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+
+        # Datos
+        for row_num, cert in enumerate(certificados, 2):
+            url_completa = f"{config.APP_URL}/certificado/{cert['slug']}"
+            ws.cell(row=row_num, column=1).value = cert['nombre']
+            ws.cell(row=row_num, column=2).value = cert['email']
+            ws.cell(row=row_num, column=3).value = cert['slug']
+            ws.cell(row=row_num, column=4).value = url_completa
+            ws.cell(row=row_num, column=5).value = cert['visto']
+            ws.cell(row=row_num, column=6).value = cert['fecha_generacion']
+            ws.cell(row=row_num, column=7).value = cert['cloudinary_url']
+
+        # Ajustar ancho de columnas
+        column_widths = [30, 35, 25, 60, 10, 20, 60]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=col_num).column_letter].width = width
+
+        # Guardar en BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'certificados_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        )
+
+    except Exception as e:
+        logger.error(f"Error al exportar Excel: {e}")
+        return f'Error: {e}', 500
+
+
 @app.route('/admin/logout', methods=['GET'])
 @require_admin_ip  # Solo IPs autorizadas
 def admin_logout():
